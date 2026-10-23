@@ -1,1 +1,97 @@
 
+<!DOCTYPE html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <meta name="viewport" content="width=device-width, initial-scale=1">
+  <title>StitchBook — Daily Work Records</title>
+  <style>
+    * { box-sizing: border-box; }
+    body {
+      margin: 0; min-height: 100vh; display: grid; place-items: center;
+      padding: 20px; background: #f1f5f1; color: #20382f;
+      font-family: Arial, sans-serif;
+    }
+    .card {
+      width: 100%; max-width: 420px; padding: 30px;
+      background: white; border: 1px solid #dce7dd;
+      border-radius: 18px; box-shadow: 0 8px 28px #173c3510;
+    }
+    h1 { margin: 0 0 8px; color: #185440; }
+    p { color: #63736a; line-height: 1.5; }
+    label { display: block; margin: 18px 0 7px; font-weight: bold; }
+    input {
+      width: 100%; padding: 12px; border: 1px solid #cbd8ce;
+      border-radius: 9px; font-size: 16px;
+    }
+    button {
+      width: 100%; margin-top: 20px; padding: 13px;
+      border: 0; border-radius: 9px; background: #185440;
+      color: white; font-size: 16px; font-weight: bold; cursor: pointer;
+    }
+    #message { overflow-wrap: anywhere; font-size: 14px; }
+  </style>
+</head>
+<body>
+  <main class="card">
+    <h1>StitchBook</h1>
+    <p>Daily stitching work records</p>
+    <p>Sign in using your registered worker or administrator account.</p>
+
+    <form id="loginForm">
+      <label for="email">Email address</label>
+      <input id="email" type="email" autocomplete="username" required>
+
+      <label for="password">Password</label>
+      <input id="password" type="password"
+             autocomplete="current-password" required>
+
+      <button id="loginButton" type="submit">Sign in</button>
+    </form>
+    <p id="message" role="status"></p>
+  </main>
+
+  <script type="module">
+    import { createClient }
+      from "https://esm.sh/@supabase/supabase-js@2";
+
+    import {
+      SUPABASE_URL,
+      SUPABASE_PUBLISHABLE_KEY
+    } from "./config.js";
+
+    const client = createClient(
+      SUPABASE_URL,
+      SUPABASE_PUBLISHABLE_KEY
+    );
+
+    const form = document.getElementById("loginForm");
+    const button = document.getElementById("loginButton");
+    const message = document.getElementById("message");
+
+    form.addEventListener("submit", async (event) => {
+      event.preventDefault();
+      button.disabled = true;
+      message.textContent = "Signing in…";
+
+      try {
+        const { data, error } = await client.auth.signInWithPassword({
+          email: document.getElementById("email").value.trim(),
+          password: document.getElementById("password").value
+        });
+
+        if (error) throw error;
+
+        message.textContent =
+          "Sign-in successful. Your account is connected to StitchBook. The worker and admin dashboards are the next step.";
+        console.log("Signed-in user ID:", data.user.id);
+      } catch (error) {
+        message.textContent = "Sign-in failed: " + error.message;
+      } finally {
+        button.disabled = false;
+      }
+    });
+  </script>
+</body>
+</html>
+
