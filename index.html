@@ -4,43 +4,119 @@
 <head>
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
-  <meta name="theme-color" content="#173c35">
-  <title>StitchBook — Daily Work Records</title>
+  <title>StitchBook | Daily Work</title>
   <link rel="stylesheet" href="./styles.css">
 </head>
 <body>
   <header>
     <h1>StitchBook</h1>
-    <p>Daily stitching work records</p>
+    <p>Stitching Work Management</p>
   </header>
 
   <main>
     <section id="loginPanel" class="card">
       <h2>Sign in</h2>
-      <p>Sign in with your registered worker or administrator account.</p>
-
       <form id="loginForm">
-        <label for="email">Email address</label> 
+        <label for="email">Email</label>
         <input id="email" type="email" autocomplete="username" required>
 
         <label for="password">Password</label>
-        <input id="password" type="password"
-               autocomplete="current-password" required>
+        <input id="password" type="password" autocomplete="current-password" required>
 
-        <button id="loginButton" type="submit">Sign in</button>
+        <button id="loginButton" type="submit">Log in</button>
       </form>
-
-      <p id="message" role="status" aria-live="polite"></p>
+      <p id="message" class="message" role="status"></p>
     </section>
 
     <section id="appPanel" class="card hidden">
-      <h2 id="welcomeHeading">Welcome to StitchBook</h2>
-      <p id="roleMessage"></p>
-      <button id="logoutButton" type="button">Log out</button>
+      <div class="app-heading">
+        <div>
+          <h2 id="welcomeHeading">Welcome to StitchBook</h2>
+          <p id="roleMessage"></p>
+        </div>
+        <button id="logoutButton" type="button">Log out</button>
+      </div>
+
+      <section id="workerPanel" class="hidden">
+        <h2>Daily Work Entry</h2>
+        <p class="info-banner">1 frame = 6 metres of fabric. Fabric length is calculated automatically.</p>
+
+        <form id="workForm">
+          <div class="form-section">
+            <h3>1. Worker & Machine Details</h3>
+            <div class="form-grid">
+              <div>
+                <label for="workerName">Worker name *</label>
+                <input id="workerName" type="text" autocomplete="name" required>
+              </div>
+              <div>
+                <label for="workerMobile">Worker mobile number *</label>
+                <input id="workerMobile" type="tel" inputmode="tel"
+                       autocomplete="tel" pattern="[0-9+() -]{7,20}" required>
+              </div>
+              <div>
+                <label for="machineNumber">Machine number *</label>
+                <input id="machineNumber" type="text" required>
+              </div>
+              <div>
+                <label for="workDate">Work date *</label>
+                <input id="workDate" type="date" required>
+              </div>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h3>2. Work Details</h3>
+            <div class="form-grid">
+              <div>
+                <label for="workCount">Work count (frames) *</label>
+                <input id="workCount" type="number" min="0" step="1" required>
+              </div>
+              <div>
+                <label for="stitchCount">Machine stitch count *</label>
+                <input id="stitchCount" type="number" min="0" step="1" required>
+              </div>
+              <div>
+                <label for="machineTime">Machine time</label>
+                <input id="machineTime" type="text" placeholder="e.g. 01:25:30">
+              </div>
+            </div>
+
+            <div class="calculation-card">
+              <span>Total fabric length</span>
+              <strong id="fabricLengthPreview">0 metres</strong>
+              <small>Frames × 6 metres</small>
+            </div>
+          </div>
+
+          <div class="form-section">
+            <h3>3. Machine Photos</h3>
+            <p>Upload at least 2 clear photos of the machine screen. You can select more photos as needed.</p>
+            <label for="machinePhotos">Select or take machine-screen photos *</label>
+            <input id="machinePhotos" type="file" accept="image/*"
+                   capture="environment" multiple required>
+            <p id="photoCount" class="help-text">0 photos selected. Minimum: 2.</p>
+            <div id="photoPreview" class="photo-preview"></div>
+          </div>
+
+          <div class="form-section">
+            <h3>4. Placement / Notes</h3>
+            <label for="placement">Notes (optional)</label>
+            <textarea id="placement" rows="3" placeholder="Add any notes here"></textarea>
+          </div>
+
+          <button id="saveWorkButton" type="submit">Save Daily Work</button>
+          <p id="workMessage" class="message" role="status"></p>
+        </form>
+      </section>
+
+      <section id="adminPanel" class="hidden">
+        <h2>Admin Dashboard</h2>
+        <p>The records dashboard will be connected in the next step.</p>
+      </section>
     </section>
   </main>
 
   <script type="module" src="./app.js"></script>
 </body>
 </html>
-  
