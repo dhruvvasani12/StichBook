@@ -170,7 +170,17 @@ async function validateMachinePhotos(files, workCount, stitchCount) {
       `Reading photo ${index + 1} of ${files.length}…`
     );
 
-    const result = await window.Tesseract.recognize(file, "eng");
+    const result = await window.Tesseract.recognize(file, "eng", {
+  logger: (message) => {
+    if (message.status === "recognizing text") {
+      console.log(
+        `Reading photo ${index + 1}: ${Math.round(
+          (message.progress || 0) * 100
+        )}%`
+      );
+    }
+  }
+});
     const text = (result.data.text || "").trim();
 
     console.log("Machine photo OCR text:", text);
