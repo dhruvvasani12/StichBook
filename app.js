@@ -56,8 +56,6 @@ async function showSignedIn(user) {
     $("roleMessage").textContent = "Worker account";
     $("workerPanel").classList.remove("hidden");
     $("adminPanel").classList.add("hidden");
-
-    // Use the worker's registered profile details when available.
     $("workerName").value = profile.full_name || "";
     $("workDate").value = new Date().toLocaleDateString("en-CA");
   }
@@ -97,19 +95,19 @@ $("logoutButton").addEventListener("click", async () => {
   showMessage("message", "You have signed out.");
 });
 
-// Fabric calculation: each frame represents 6 metres.
+// Each frame represents 6 metres of fabric.
 function updateFabricLength() {
   const frames = Number($("workCount").value);
   const metres = Number.isFinite(frames) && frames >= 0 ? frames * 6 : 0;
 
   $("fabricLengthPreview").textContent =
     `${metres.toLocaleString()} metres`;
+
   return metres;
 }
 
 $("workCount").addEventListener("input", updateFabricLength);
 
-// Show photo previews and enforce the minimum of two.
 let previewUrls = [];
 
 $("machinePhotos").addEventListener("change", () => {
@@ -136,27 +134,93 @@ $("machinePhotos").addEventListener("change", () => {
   }
 });
 
+// Convert an image to a data URL for secure AI photo checking.
+function fileToDataUrl(file) {
+  return new Promise((resolve, reject) => {
+    const reader = new FileReader();
+
+    reader.onload = () => {
+      if (typeof reader.result !== "string") {
+        reject(new Error("Could not read a photo. Please select it again."));
+        return;
+      }
+
+      resolve(reader.result);
+    };
+
+    reader.onerror = () => {
+      reject(new Error("Could not read a photo. Please select it again."));
+    };
+
+    reader.readAsDataURL(file);
+  });
+}
+
+// Validate the photos before inserting any database record.
+async function validateMachinePhotos(files, workCount, stitchCount) {
+  showMessage(
+    "workMessage",
+    "AI is checking the machine photos. Please wait…"
+  );
+
+  // The current deployed function allows a maximum of 12 photos.
+  if (files.length > 12) {
+    throw new Error(
+      "एक बार में अधिकतम 12 फोटो जाँच सकते हैं। कृपया 12 या उससे कम फोटो चुनें।"
+    );
+  }
+
+  const photos = await Promise.all(files.map(fileToDataUrl));
+
+  const { data, error } = await supabase.functions.invoke(
+    "check-machine-photos",
+    {
+      body: {
+        workCount,
+        stitchCount,
+        photos
+      }
+    }
+  );
+
+  if (error) {
+    console.error("AI photo-check error:", error);
+    throw new Error(
+      "फोटो की जाँच नहीं हो सकी। कृपया इंटरनेट और लॉगिन जाँचकर फिर कोशिश करें।"
+    );
+  }
+
+  if (!data || data.valid !== true) {
+    throw new Error(
+      data?.error ||
+      "फोटो के नंबर स्पष्ट नहीं हैं। कृपया मशीन स्क्रीन की साफ़ फोटो अपलोड करें।"
+    );
+  }
+
+  return data;
+}
+
 $("workForm").addEventListener("submit", async (event) => {
   event.preventDefault();
 
   const button = $("saveWorkButton");
-  const userResult = await supabase.auth.getUser();
-  const user = userResult.data.user;
-
-  if (userResult.error || !user) {
-    showMessage("workMessage", "Your session expired. Please log in again.", true);
-    return;
-  }
-
   const files = Array.from($("machinePhotos").files || []);
 
   if (files.length < 2) {
-    showMessage("workMessage", "Please select at least 2 machine photos.", true);
+    showMessage(
+      "workMessage",
+      "कृपया मशीन स्क्रीन की कम से कम 2 फोटो अपलोड करें।",
+      true
+    );
     return;
   }
 
   if (files.some((file) => !file.type.startsWith("image/"))) {
-    showMessage("workMessage", "Please select image files only.", true);
+    showMessage(
+      "workMessage",
+      "कृपया केवल image files अपलोड करें।",
+      true
+    );
     return;
   }
 
@@ -164,22 +228,39 @@ $("workForm").addEventListener("submit", async (event) => {
   const stitchCount = Number($("stitchCount").value);
 
   if (!Number.isInteger(workCount) || workCount < 0) {
-    showMessage("workMessage", "Work count must be a whole number of 0 or more.", true);
+    showMessage(
+      "workMessage",
+      "कृपया सही Work count भरें।",
+      true
+    );
     return;
   }
 
   if (!Number.isInteger(stitchCount) || stitchCount < 0) {
-    showMessage("workMessage", "Stitch count must be a whole number of 0 or more.", true);
+    showMessage(
+      "workMessage",
+      "कृपया सही Machine stitch count भरें।",
+      true
+    );
     return;
   }
 
   button.disabled = true;
-  showMessage("workMessage", "Saving work record…");
-
-  const uploadedPaths = [];
   let recordId = null;
+  const uploadedPaths = [];
 
   try {
+    const { data: userResult, error: userError } =
+      await supabase.auth.getUser();
+
+    if (userError) throw userError;
+
+    const user = userResult.user;
+
+    if (!user) {
+      throw new Error("आपका लॉगिन समाप्त हो गया है। कृपया फिर से लॉगिन करें।");
+    }
+
     const { data: profile, error: profileError } = await supabase
       .from("profiles")
       .select("id, full_name, worker_code, role")
@@ -197,7 +278,14 @@ $("workForm").addEventListener("submit", async (event) => {
     const machineNumber = $("machineNumber").value.trim();
     const fabricLength = workCount * 6;
 
-    // Save the work record first.
+    // IMPORTANT: Do not save anything until the AI approves the photos.
+    await validateMachinePhotos(files, workCount, stitchCount);
+
+    showMessage(
+      "workMessage",
+      "फोटो सही हैं। अब रिकॉर्ड सेव हो रहा है…"
+    );
+
     const { data: record, error: recordError } = await supabase
       .from("daily_work_records")
       .insert({
@@ -218,7 +306,6 @@ $("workForm").addEventListener("submit", async (event) => {
     if (recordError) throw recordError;
     recordId = record.id;
 
-    // Upload every selected photo to the worker's private folder.
     for (let index = 0; index < files.length; index++) {
       const file = files[index];
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
@@ -237,7 +324,6 @@ $("workForm").addEventListener("submit", async (event) => {
       uploadedPaths.push(path);
     }
 
-    // Save photo paths for the admin and worker record.
     const photoRows = uploadedPaths.map((photoPath) => ({
       record_id: recordId,
       photo_path: photoPath
@@ -251,7 +337,7 @@ $("workForm").addEventListener("submit", async (event) => {
 
     showMessage(
       "workMessage",
-      `Saved successfully! ${files.length} photos uploaded. Fabric length: ${fabricLength} metres.`
+      `रिकॉर्ड सफलतापूर्वक सेव हो गया! ${files.length} फोटो अपलोड हुईं। कुल कपड़ा: ${fabricLength} मीटर।`
     );
 
     $("workForm").reset();
@@ -260,13 +346,19 @@ $("workForm").addEventListener("submit", async (event) => {
     $("fabricLengthPreview").textContent = "0 metres";
     $("photoCount").textContent = "0 photos selected. Minimum: 2.";
     $("photoPreview").replaceChildren();
+
+    previewUrls.forEach((url) => URL.revokeObjectURL(url));
+    previewUrls = [];
   } catch (error) {
-    // If an upload or photo-path save fails, keep a useful error message.
-    // The record may already exist if the failure occurred after insertion.
+    console.error("Work submission error:", error);
+
     showMessage(
       "workMessage",
-      `Could not finish saving: ${error.message}` +
-        (recordId ? ` Record ID: ${recordId}. Please check before retrying.` : ""),
+      error.message ||
+        "रिकॉर्ड सेव नहीं हो सका। कृपया फिर कोशिश करें।" +
+        (recordId
+          ? ` Record ID: ${recordId}. कृपया दोबारा सेव करने से पहले जाँचें।`
+          : ""),
       true
     );
   } finally {

@@ -1,0 +1,10 @@
+# Local Supabase CLI state
+supabase/.temp/
+
+# Local backup
+app-backup.js
+
+# Local environment secrets
+.env
+.env.*
+!.env.example
