@@ -146,28 +146,28 @@ $("machinePhotos").addEventListener("change", () => {
 async function validateMachinePhotos(files, workCount, stitchCount) {
   showMessage("workMessage", "Reading machine photos…");
 
-  if (files.length < 2) {
-    throw new Error("Please select at least 2 machine photos.");
-  }
-
-  if (files.length > 12) {
-    throw new Error("Please select no more than 12 photos.");
+  if (files.length < 2 || files.length > 12) {
+    throw new Error("Please upload between 2 and 12 machine photos.");
   }
 
   if (!window.Tesseract) {
     throw new Error(
-      "Free photo reader did not load. Check your internet connection and refresh."
+      "Photo reader did not load. Check your internet connection and refresh."
     );
   }
 
-  for (const file of files) {
+  const recognizedTexts = [];
+
+  for (let index = 0; index < files.length; index++) {
+    const file = files[index];
+
     if (!file.type.startsWith("image/")) {
       throw new Error("Please select image files only.");
     }
 
     showMessage(
       "workMessage",
-      `Reading photo ${files.indexOf(file) + 1} of ${files.length}…`
+      `Reading photo ${index + 1} of ${files.length}…`
     );
 
     const result = await window.Tesseract.recognize(file, "eng");
@@ -175,21 +175,50 @@ async function validateMachinePhotos(files, workCount, stitchCount) {
 
     console.log("Machine photo OCR text:", text);
 
-    if (!text) {
-      throw new Error(
-        "Could not read one of the photos. Please upload clearer images."
-      );
+    if (text) {
+      recognizedTexts.push(text);
     }
   }
 
-  console.log("Entered Work count:", workCount);
-  console.log("Entered Machine stitch count:", stitchCount);
+  const machineText = recognizedTexts.join("\n");
+  const normalized = machineText
+    .replace(/[,，]/g, "")
+    .replace(/：/g, ":");
 
-  throw new Error(
-    "OCR test completed, but All Work and Overall values are not yet verified. No record was saved."
+  const allWorksMatch = normalized.match(
+    /all\s*works?\s*[:=\-]?\s*(\d+)/i
+  );
+
+  const overallMatch = normalized.match(
+    /overall\s*[:=\-]?\s*(\d+)/i
+  );
+
+  if (!allWorksMatch || !overallMatch) {
+    throw new Error(
+      "Could not clearly read All Works and Overall from your photos. Please upload clear photos showing both totals. No record was saved."
+    );
+  }
+
+  const detectedWorks = Number(allWorksMatch[1]);
+  const detectedOverall = Number(overallMatch[1]);
+
+  if (detectedWorks !== Number(workCount)) {
+    throw new Error(
+      `The photo shows All Works = ${detectedWorks}, but you entered ${workCount}. Please correct the Work count. No record was saved.`
+    );
+  }
+
+  if (detectedOverall !== Number(stitchCount)) {
+    throw new Error(
+      `The photo shows Overall = ${detectedOverall}, but you entered ${stitchCount}. Please correct the Machine stitch count. No record was saved.`
+    );
+  }
+
+  showMessage(
+    "workMessage",
+    "Machine totals verified. Saving your record…"
   );
 }
-
 $("workForm").addEventListener("submit", async (event) => {
   event.preventDefault();
 
