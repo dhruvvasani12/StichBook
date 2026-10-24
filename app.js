@@ -181,6 +181,16 @@ async function validateMachinePhotos(files, workCount, stitchCount) {
     }
   }
 });
+  logger: (message) => {
+    if (message.status === "recognizing text") {
+      console.log(
+        `Reading photo ${index + 1}: ${Math.round(
+          (message.progress || 0) * 100
+        )}%`
+      );
+    }
+  }
+});
     const text = (result.data.text || "").trim();
 
     console.log("Machine photo OCR text:", text);
