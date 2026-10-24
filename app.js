@@ -62,27 +62,28 @@ async function showSignedIn(user) {
 
     $("adminPanel")?.classList.remove("hidden");
     $("workerPanel")?.classList.add("hidden");
-  } else {
-    if (profile.role !== "worker") {
-      showSignedOut();
-      showMessage("message", "Your account role is not recognized.", true);
-      return;
-    }
+    return;
+  }
 
-    if (roleMessage) {
-      roleMessage.textContent = "Worker account";
-    }
+  if (profile.role !== "worker") {
+    showSignedOut();
+    showMessage("message", "Your account role is not recognized.", true);
+    return;
+  }
 
-    $("workerPanel")?.classList.remove("hidden");
-    $("adminPanel")?.classList.add("hidden");
+  if (roleMessage) {
+    roleMessage.textContent = "Worker account";
+  }
 
-    if ($("workerName")) {
-      $("workerName").value = profile.full_name || "";
-    }
+  $("workerPanel")?.classList.remove("hidden");
+  $("adminPanel")?.classList.add("hidden");
 
-    if ($("workDate")) {
-      $("workDate").value = new Date().toLocaleDateString("en-CA");
-    }
+  if ($("workerName")) {
+    $("workerName").value = profile.full_name || "";
+  }
+
+  if ($("workDate")) {
+    $("workDate").value = new Date().toLocaleDateString("en-CA");
   }
 }
 
@@ -97,8 +98,8 @@ $("loginForm")?.addEventListener("submit", async (event) => {
 
   try {
     const { data, error } = await supabase.auth.signInWithPassword({
-      email: $("email")?.value.trim(),
-      password: $("password")?.value
+      email: $("email")?.value.trim() || "",
+      password: $("password")?.value || ""
     });
 
     if (error) throw error;
@@ -114,15 +115,16 @@ $("loginForm")?.addEventListener("submit", async (event) => {
 
 // Logout
 $("logoutButton")?.addEventListener("click", async () => {
-  const { error } = await supabase.auth.signOut();
+  try {
+    const { error } = await supabase.auth.signOut();
 
-  if (error) {
+    if (error) throw error;
+
+    showSignedOut();
+    showMessage("message", "You have signed out.");
+  } catch (error) {
     showMessage("message", `Sign-out failed: ${error.message}`, true);
-    return;
   }
-
-  showSignedOut();
-  showMessage("message", "You have signed out.");
 });
 
 // One frame equals 6 metres of fabric.
@@ -172,7 +174,7 @@ $("machinePhotos")?.addEventListener("change", () => {
   }
 });
 
-// Read and verify machine totals before saving.
+// Read machine photos before saving the work record.
 async function validateMachinePhotos(files, workCount, stitchCount) {
   showMessage("workMessage", "Reading machine photos…");
 
@@ -215,7 +217,9 @@ async function validateMachinePhotos(files, workCount, stitchCount) {
     const text = (result.data?.text || "").trim();
     console.log(`OCR text from photo ${index + 1}:`, text);
 
-    if (text) recognizedTexts.push(text);
+    if (text) {
+      recognizedTexts.push(text);
+    }
   }
 
   const normalized = recognizedTexts
@@ -233,8 +237,8 @@ async function validateMachinePhotos(files, workCount, stitchCount) {
 
   if (!allWorksMatch || !overallMatch) {
     throw new Error(
-      "Could not clearly read All Works and Overall from the photos. " +
-      "Please upload clear photos showing both totals. No record was saved."
+      "Could not clearly read All Works and Overall from your photos. " +
+      "Upload clear photos showing both totals. No record was saved."
     );
   }
 
@@ -244,14 +248,14 @@ async function validateMachinePhotos(files, workCount, stitchCount) {
   if (detectedWorks !== workCount) {
     throw new Error(
       `The photo shows All Works = ${detectedWorks}, but you entered ` +
-      `${workCount}. Please correct the Work count. No record was saved.`
+      `${workCount}. Correct the Work count. No record was saved.`
     );
   }
 
   if (detectedOverall !== stitchCount) {
     throw new Error(
       `The photo shows Overall = ${detectedOverall}, but you entered ` +
-      `${stitchCount}. Please correct the Machine stitch count. ` +
+      `${stitchCount}. Correct the Machine stitch count. ` +
       "No record was saved."
     );
   }
@@ -339,7 +343,7 @@ $("workForm")?.addEventListener("submit", async (event) => {
     const machineNumber = $("machineNumber")?.value.trim() || "";
     const fabricLength = workCount * 6;
 
-    // Do not create a record until the photos pass validation.
+    // Verify totals before creating the database record.
     await validateMachinePhotos(files, workCount, stitchCount);
 
     const { data: record, error: recordError } = await supabase
@@ -366,6 +370,7 @@ $("workForm")?.addEventListener("submit", async (event) => {
     for (let index = 0; index < files.length; index++) {
       const file = files[index];
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+
       const path =
         `${user.id}/${recordId}/${Date.now()}_${index}_${safeName}`;
 
@@ -438,14 +443,14 @@ $("workForm")?.addEventListener("submit", async (event) => {
   }
 });
 
-// Restore an existing login session on page load.
+// Restore the existing login session when the page opens.
 try {
   const { data: sessionData, error: sessionError } =
     await supabase.auth.getSession();
 
   if (sessionError) {
-    showMessage("message", sessionError.message, true);
     showSignedOut();
+    showMessage("message", sessionError.message, true);
   } else if (sessionData.session) {
     await showSignedIn(sessionData.session.user);
   } else {
@@ -453,8 +458,12 @@ try {
   }
 } catch (error) {
   console.error("Session initialization error:", error);
-  showMessage("message", "Could not initialize login. Please refresh.", true);
   showSignedOut();
+  showMessage(
+    "message",
+    "Could not initialize login. Please refresh the page.",
+    true
+  );
 }
 
 supabase.auth.onAuthStateChange((event, session) => {
