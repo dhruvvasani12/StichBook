@@ -15,6 +15,7 @@ const $ = (id) => document.getElementById(id);
 function showMessage(id, message, isError = false) {
   const element = $(id);
   if (!element) return;
+
   element.textContent = message;
   element.className = isError ? "message error" : "message";
 }
@@ -45,6 +46,7 @@ async function showSignedIn(user) {
 
   $("loginPanel").classList.add("hidden");
   $("appPanel").classList.remove("hidden");
+
   $("welcomeHeading").textContent =
     `Welcome, ${profile.full_name || profile.worker_code || user.email}`;
 
@@ -56,6 +58,7 @@ async function showSignedIn(user) {
     $("roleMessage").textContent = "Worker account";
     $("workerPanel").classList.remove("hidden");
     $("adminPanel").classList.add("hidden");
+
     $("workerName").value = profile.full_name || "";
     $("workDate").value = new Date().toLocaleDateString("en-CA");
   }
@@ -75,6 +78,7 @@ $("loginForm").addEventListener("submit", async (event) => {
     });
 
     if (error) throw error;
+
     await showSignedIn(data.user);
   } catch (error) {
     showMessage("message", "Sign-in failed: " + error.message, true);
@@ -95,10 +99,11 @@ $("logoutButton").addEventListener("click", async () => {
   showMessage("message", "You have signed out.");
 });
 
-// Each frame represents 6 metres of fabric.
+// One frame equals 6 metres of fabric.
 function updateFabricLength() {
   const frames = Number($("workCount").value);
-  const metres = Number.isFinite(frames) && frames >= 0 ? frames * 6 : 0;
+  const metres =
+    Number.isFinite(frames) && frames >= 0 ? frames * 6 : 0;
 
   $("fabricLengthPreview").textContent =
     `${metres.toLocaleString()} metres`;
@@ -115,6 +120,7 @@ $("machinePhotos").addEventListener("change", () => {
   previewUrls = [];
 
   const files = Array.from($("machinePhotos").files || []);
+
   $("photoCount").textContent =
     `${files.length} photo(s) selected. Minimum: 2.`;
 
@@ -130,74 +136,58 @@ $("machinePhotos").addEventListener("change", () => {
     const img = document.createElement("img");
     img.src = url;
     img.alt = "Selected machine-screen photo";
+
     preview.appendChild(img);
   }
 });
 
-// Convert an image to a data URL for secure AI photo checking.
-function fileToDataUrl(file) {
-  return new Promise((resolve, reject) => {
-    const reader = new FileReader();
-
-    reader.onload = () => {
-      if (typeof reader.result !== "string") {
-        reject(new Error("Could not read a photo. Please select it again."));
-        return;
-      }
-
-      resolve(reader.result);
-    };
-
-    reader.onerror = () => {
-      reject(new Error("Could not read a photo. Please select it again."));
-    };
-
-    reader.readAsDataURL(file);
-  });
-}
-
-// Validate the photos before inserting any database record.
+// Free OCR using Tesseract.js.
+// This test reads the text but does not approve records for saving.
 async function validateMachinePhotos(files, workCount, stitchCount) {
-  showMessage(
-    "workMessage",
-    "AI is checking the machine photos. Please wait…"
-  );
+  showMessage("workMessage", "Reading machine photos…");
 
-  // The current deployed function allows a maximum of 12 photos.
+  if (files.length < 2) {
+    throw new Error("Please select at least 2 machine photos.");
+  }
+
   if (files.length > 12) {
+    throw new Error("Please select no more than 12 photos.");
+  }
+
+  if (!window.Tesseract) {
     throw new Error(
-      "एक बार में अधिकतम 12 फोटो जाँच सकते हैं। कृपया 12 या उससे कम फोटो चुनें।"
+      "Free photo reader did not load. Check your internet connection and refresh."
     );
   }
 
-  const photos = await Promise.all(files.map(fileToDataUrl));
-
-  const { data, error } = await supabase.functions.invoke(
-    "check-machine-photos",
-    {
-      body: {
-        workCount,
-        stitchCount,
-        photos
-      }
+  for (const file of files) {
+    if (!file.type.startsWith("image/")) {
+      throw new Error("Please select image files only.");
     }
+
+    showMessage(
+      "workMessage",
+      `Reading photo ${files.indexOf(file) + 1} of ${files.length}…`
+    );
+
+    const result = await window.Tesseract.recognize(file, "eng");
+    const text = (result.data.text || "").trim();
+
+    console.log("Machine photo OCR text:", text);
+
+    if (!text) {
+      throw new Error(
+        "Could not read one of the photos. Please upload clearer images."
+      );
+    }
+  }
+
+  console.log("Entered Work count:", workCount);
+  console.log("Entered Machine stitch count:", stitchCount);
+
+  throw new Error(
+    "OCR test completed, but All Work and Overall values are not yet verified. No record was saved."
   );
-
-  if (error) {
-    console.error("AI photo-check error:", error);
-    throw new Error(
-      "फोटो की जाँच नहीं हो सकी। कृपया इंटरनेट और लॉगिन जाँचकर फिर कोशिश करें।"
-    );
-  }
-
-  if (!data || data.valid !== true) {
-    throw new Error(
-      data?.error ||
-      "फोटो के नंबर स्पष्ट नहीं हैं। कृपया मशीन स्क्रीन की साफ़ फोटो अपलोड करें।"
-    );
-  }
-
-  return data;
 }
 
 $("workForm").addEventListener("submit", async (event) => {
@@ -206,10 +196,10 @@ $("workForm").addEventListener("submit", async (event) => {
   const button = $("saveWorkButton");
   const files = Array.from($("machinePhotos").files || []);
 
-  if (files.length < 2) {
+  if (files.length < 2 || files.length > 12) {
     showMessage(
       "workMessage",
-      "कृपया मशीन स्क्रीन की कम से कम 2 फोटो अपलोड करें।",
+      "Please upload between 2 and 12 machine-screen photos.",
       true
     );
     return;
@@ -218,7 +208,7 @@ $("workForm").addEventListener("submit", async (event) => {
   if (files.some((file) => !file.type.startsWith("image/"))) {
     showMessage(
       "workMessage",
-      "कृपया केवल image files अपलोड करें।",
+      "Please select image files only.",
       true
     );
     return;
@@ -230,7 +220,7 @@ $("workForm").addEventListener("submit", async (event) => {
   if (!Number.isInteger(workCount) || workCount < 0) {
     showMessage(
       "workMessage",
-      "कृपया सही Work count भरें।",
+      "Please enter a valid Work count.",
       true
     );
     return;
@@ -239,7 +229,7 @@ $("workForm").addEventListener("submit", async (event) => {
   if (!Number.isInteger(stitchCount) || stitchCount < 0) {
     showMessage(
       "workMessage",
-      "कृपया सही Machine stitch count भरें।",
+      "Please enter a valid Machine stitch count.",
       true
     );
     return;
@@ -258,7 +248,7 @@ $("workForm").addEventListener("submit", async (event) => {
     const user = userResult.user;
 
     if (!user) {
-      throw new Error("आपका लॉगिन समाप्त हो गया है। कृपया फिर से लॉगिन करें।");
+      throw new Error("Your session has expired. Please sign in again.");
     }
 
     const { data: profile, error: profileError } = await supabase
@@ -278,14 +268,11 @@ $("workForm").addEventListener("submit", async (event) => {
     const machineNumber = $("machineNumber").value.trim();
     const fabricLength = workCount * 6;
 
-    // IMPORTANT: Do not save anything until the AI approves the photos.
+    // Safety: stop before inserting any database record until
+    // the machine-screen values can be verified reliably.
     await validateMachinePhotos(files, workCount, stitchCount);
 
-    showMessage(
-      "workMessage",
-      "फोटो सही हैं। अब रिकॉर्ड सेव हो रहा है…"
-    );
-
+    // The code below runs only after photo validation approves.
     const { data: record, error: recordError } = await supabase
       .from("daily_work_records")
       .insert({
@@ -304,11 +291,13 @@ $("workForm").addEventListener("submit", async (event) => {
       .single();
 
     if (recordError) throw recordError;
+
     recordId = record.id;
 
     for (let index = 0; index < files.length; index++) {
       const file = files[index];
       const safeName = file.name.replace(/[^a-zA-Z0-9._-]/g, "_");
+
       const path =
         `${user.id}/${recordId}/${Date.now()}_${index}_${safeName}`;
 
@@ -321,6 +310,7 @@ $("workForm").addEventListener("submit", async (event) => {
         });
 
       if (uploadError) throw uploadError;
+
       uploadedPaths.push(path);
     }
 
@@ -337,7 +327,7 @@ $("workForm").addEventListener("submit", async (event) => {
 
     showMessage(
       "workMessage",
-      `रिकॉर्ड सफलतापूर्वक सेव हो गया! ${files.length} फोटो अपलोड हुईं। कुल कपड़ा: ${fabricLength} मीटर।`
+      `Record saved successfully! ${files.length} photos uploaded. Total fabric: ${fabricLength} metres.`
     );
 
     $("workForm").reset();
@@ -352,15 +342,15 @@ $("workForm").addEventListener("submit", async (event) => {
   } catch (error) {
     console.error("Work submission error:", error);
 
-    showMessage(
-      "workMessage",
-      error.message ||
-        "रिकॉर्ड सेव नहीं हो सका। कृपया फिर कोशिश करें।" +
-        (recordId
-          ? ` Record ID: ${recordId}. कृपया दोबारा सेव करने से पहले जाँचें।`
-          : ""),
-      true
-    );
+    let message =
+      error.message || "Could not save the record. Please try again.";
+
+    if (recordId) {
+      message +=
+        ` Record ID: ${recordId}. Check the record before retrying.`;
+    }
+
+    showMessage("workMessage", message, true);
   } finally {
     button.disabled = false;
   }
