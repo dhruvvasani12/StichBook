@@ -1,4 +1,4 @@
-
+```javascript
 import { createClient } from "https://esm.sh/@supabase/supabase-js@2";
 import {
   SUPABASE_URL,
@@ -141,8 +141,8 @@ $("machinePhotos").addEventListener("change", () => {
   }
 });
 
-// Free OCR using Tesseract.js.
-// This test reads the text but does not approve records for saving.
+// Read machine photos with Tesseract.js.
+// Records are saved only if both machine totals are detected and matched.
 async function validateMachinePhotos(files, workCount, stitchCount) {
   showMessage("workMessage", "Reading machine photos…");
 
@@ -171,26 +171,17 @@ async function validateMachinePhotos(files, workCount, stitchCount) {
     );
 
     const result = await window.Tesseract.recognize(file, "eng", {
-  logger: (message) => {
-    if (message.status === "recognizing text") {
-      console.log(
-        `Reading photo ${index + 1}: ${Math.round(
-          (message.progress || 0) * 100
-        )}%`
-      );
-    }
-  }
-});
-  logger: (message) => {
-    if (message.status === "recognizing text") {
-      console.log(
-        `Reading photo ${index + 1}: ${Math.round(
-          (message.progress || 0) * 100
-        )}%`
-      );
-    }
-  }
-});
+      logger: (message) => {
+        if (message.status === "recognizing text") {
+          console.log(
+            `Reading photo ${index + 1}: ${Math.round(
+              (message.progress || 0) * 100
+            )}%`
+          );
+        }
+      }
+    });
+
     const text = (result.data.text || "").trim();
 
     console.log("Machine photo OCR text:", text);
@@ -205,6 +196,7 @@ async function validateMachinePhotos(files, workCount, stitchCount) {
     .replace(/[,，]/g, "")
     .replace(/：/g, ":");
 
+  // Detect the machine's final totals.
   const allWorksMatch = normalized.match(
     /all\s*works?\s*[:=\-]?\s*(\d+)/i
   );
@@ -239,6 +231,7 @@ async function validateMachinePhotos(files, workCount, stitchCount) {
     "Machine totals verified. Saving your record…"
   );
 }
+
 $("workForm").addEventListener("submit", async (event) => {
   event.preventDefault();
 
@@ -285,6 +278,7 @@ $("workForm").addEventListener("submit", async (event) => {
   }
 
   button.disabled = true;
+
   let recordId = null;
   const uploadedPaths = [];
 
@@ -317,11 +311,9 @@ $("workForm").addEventListener("submit", async (event) => {
     const machineNumber = $("machineNumber").value.trim();
     const fabricLength = workCount * 6;
 
-    // Safety: stop before inserting any database record until
-    // the machine-screen values can be verified reliably.
+    // Verify machine totals before inserting a database record.
     await validateMachinePhotos(files, workCount, stitchCount);
 
-    // The code below runs only after photo validation approves.
     const { data: record, error: recordError } = await supabase
       .from("daily_work_records")
       .insert({
@@ -421,3 +413,4 @@ supabase.auth.onAuthStateChange((event, session) => {
     showSignedOut();
   }
 });
+```
